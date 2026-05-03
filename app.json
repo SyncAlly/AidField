@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "AidField",
+    "slug": "aidfield",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1C2B36"
+    },
+    "android": {
+      "package": "com.aidfield.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1C2B36"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.aidfield.app",
+      "supportsTablet": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-camera",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "AidField needs microphone access for voice emergency input."
+        }
+      ],
+      "expo-speech-recognition"
+    ]
+  }
+}
