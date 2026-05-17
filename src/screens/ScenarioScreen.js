@@ -1,5 +1,5 @@
 // src/screens/ScenarioScreen.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, StatusBar, ActivityIndicator
@@ -10,7 +10,8 @@ import * as Speech from 'expo-speech';
 import {
   getScenarioById,
   getStepsByScenario,
-  getResourcesByScenario
+  getResourcesByScenario,
+  getSettings,
 } from '../database/db';
 import { colors } from '../constants/colors';
 import { layout } from '../constants/layout';
@@ -22,26 +23,40 @@ export default function ScenarioScreen({ navigation, route }) {
   const [resources, setResources]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [speaking, setSpeaking]     = useState(false);
-  const stopRequested = React.useRef(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const stopRequested               = useRef(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showSwahili, setShowSwahili] = useState(false);
   const [showResources, setShowResources] = useState(false);
 
   useEffect(() => {
     loadData();
-    return () => Speech.stop();
+    return () => {
+      Speech.stop();
+      stopRequested.current = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (ttsEnabled && steps.length > 0 && scenario && !loading) {
+      speakSteps();
+    }
+  }, [ttsEnabled, steps, scenario, loading]);
 
   const loadData = async () => {
     try {
-      const [s, st, r] = await Promise.all([
+      const [s, st, r, settings] = await Promise.all([
         getScenarioById(scenarioId),
         getStepsByScenario(scenarioId),
         getResourcesByScenario(scenarioId),
+        getSettings(),
       ]);
       setScenario(s);
       setSteps(st);
       setResources(r);
+      if (settings?.tts_enabled === 1) {
+        setTtsEnabled(true);
+      }
     } catch (e) {
       console.error('Failed to load scenario:', e);
     } finally {

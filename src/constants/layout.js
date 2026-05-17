@@ -49,7 +49,7 @@ export const layout = {
   headerHeight: 56,
 
   // Tab bar height
-  tabBarHeight: 64,
+  tabBarHeight: 56,
 
   // Bottom safe area padding
   bottomPadding: 16,
