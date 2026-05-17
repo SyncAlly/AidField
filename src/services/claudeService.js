@@ -1,13 +1,13 @@
 import axios from 'axios';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+import { GEMINI_API_KEY } from '@env';
 
 // 1. Configuration
 const PRIMARY_MODEL = 'gemini-2.5-flash'; 
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-// IMPORTANT: Replace this key soon and move it to a .env file!
-const API_KEY = 'AIzaSyAytQAhwUrycpA8RkAS8iQO3y1wqGHYUEE';
+// API key loaded from .env — to swap keys, edit the .env file only
+const API_KEY = GEMINI_API_KEY;
 
 const SYSTEM_PROMPT = `You are AidField, an emergency first aid assistant for Kenya.
 Provide concise emergency first aid guidance. No markdown formatting whatsoever.
