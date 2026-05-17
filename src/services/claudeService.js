@@ -38,6 +38,14 @@ IMPROVISED RESOURCES:
 - [Medical item]: [Household substitute]
 
 CALL: [When to call 999 or 112]`;
+// ── Strip residual markdown from AI responses ──────────────────────────────
+const cleanMarkdown = (text) =>
+  text
+    .replace(/[*_~`#>]/g, '')       // remove markdown symbols
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // remove links, keep label
+    .replace(/\n{3,}/g, '\n\n')    // collapse excess blank lines
+    .trim();
+
 /**
  * Helper to send request with automatic retry for 503 errors (Server Busy)
  */
@@ -97,34 +105,41 @@ export const getAIGuidanceWithImage = async (userMessage, base64Image) => {
     throw new Error('Invalid image data');
   }
 
-  const response = await axios.post(
-    `${GEMINI_API_URL}?key=${API_KEY}`,
-    {
-      contents: [
-        {
-          parts: [
-            {
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: cleanBase,
-              }
-            },
-            {
-              text: SYSTEM_PROMPT + '\n\nUser: ' + (userMessage || 'What first aid is needed for what you see in this image?')
+  const buildPayload = (msg) => ({
+    contents: [
+      {
+        parts: [
+          {
+            inline_data: {
+              mime_type: 'image/jpeg',
+              data: cleanBase,
             }
-          ]
-        }
-      ],
-      generationConfig: {
-        maxOutputTokens: 2048,
-        temperature: 0.3,
+          },
+          {
+            text: SYSTEM_PROMPT + '\n\nUser: ' + (msg || 'What first aid is needed for what you see in this image?')
+          }
+        ]
       }
-    },
-    {
-      headers: { 'Content-Type': 'application/json' }
+    ],
+    generationConfig: {
+      maxOutputTokens: 2048,
+      temperature: 0.3,
     }
-  );
-  return cleanMarkdown(response.data.candidates[0].content.parts[0].text);
+  });
+
+  try {
+    const response = await sendToGeminiWithRetry(PRIMARY_MODEL, buildPayload(userMessage));
+    return cleanMarkdown(response.data.candidates[0].content.parts[0].text);
+  } catch (error) {
+    const status = error.response?.status;
+    // On quota (429), forbidden (403), not found (404), or server errors — try fallback model
+    if ([400, 403, 404, 429, 503].includes(status)) {
+      console.warn(`Image primary model failed (Status ${status}). Trying fallback...`);
+      const fbResponse = await sendToGeminiWithRetry(FALLBACK_MODEL, buildPayload(userMessage));
+      return cleanMarkdown(fbResponse.data.candidates[0].content.parts[0].text);
+    }
+    throw error;
+  }
 };
 
 // ── Parse AI response into structured sections ──────────────────────────────

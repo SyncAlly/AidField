@@ -138,8 +138,10 @@ export default function HomeScreen({ navigation }) {
                   );
                   setAiResult(parseAIResponse(raw));
                 } catch (e) {
-                  console.error('Image AI failed:', e);
-                  setAiResult({ error: 'AI unavailable. Try describing the emergency in text.' });
+                  console.warn('Image AI unavailable:', e.message);
+                  setAiResult({
+                    error: 'AI image analysis is temporarily unavailable. Type a description of the emergency in the search bar and tap Ask AI, or browse the Scenarios tab.'
+                  });
                 } finally {
                   setLoading(false);
                 }
@@ -178,8 +180,10 @@ export default function HomeScreen({ navigation }) {
                   );
                   setAiResult(parseAIResponse(raw));
                 } catch (e) {
-                  console.error('Image AI failed:', e);
-                  setAiResult({ error: 'AI unavailable. Try describing the emergency in text.' });
+                  console.warn('Image AI unavailable:', e.message);
+                  setAiResult({
+                    error: 'AI image analysis is temporarily unavailable. Type a description of the emergency in the search bar and tap Ask AI, or browse the Scenarios tab.'
+                  });
                 } finally {
                   setLoading(false);
                 }
@@ -542,6 +546,14 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
+        {/* Error card */}
+        {aiResult?.error && (
+          <View style={styles.errorCard}>
+            <Ionicons name="warning-outline" size={22} color={colors.urgencyAmber} />
+            <Text style={styles.errorCardText}>{aiResult.error}</Text>
+          </View>
+        )}
+
         {/* Critical emergencies */}
         {!aiResult && !loading && quickScenarios.length > 0 && (
           <>
@@ -594,6 +606,26 @@ export default function HomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+
+  // Error card
+  errorCard: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: layout.radius.lg,
+    padding: layout.spacing.md,
+    marginBottom: layout.spacing.md,
+    borderWidth: 1,
+    borderColor: colors.urgencyAmber + '55',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: layout.spacing.sm,
+    ...layout.shadow,
+  },
+  errorCardText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
 
   header: {
     backgroundColor: colors.dark,
