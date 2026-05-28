@@ -93,7 +93,7 @@ export default function ScenariosScreen({ navigation, route }) {
             {searchQuery ? `Results for "${searchQuery}"` : 'Browse emergency guides'}
           </Text>
         </View>
-        {searchResults.length > 0 && (
+        {searchQuery.length > 0 && (
           <TouchableOpacity
             style={styles.clearBtn}
             onPress={clearResults}
@@ -121,53 +121,80 @@ export default function ScenariosScreen({ navigation, route }) {
           color={colors.primary}
           style={{ marginTop: 60 }}
         />
-      ) : searchResults.length > 0 ? (
+      ) : searchQuery ? (
         // ── Offline search results ──────────────────────────────────────────
         <ScrollView
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.resultsCount}>
-            {searchResults.length} scenario{searchResults.length !== 1 ? 's' : ''} found
-          </Text>
-          {searchResults.map((item) => (
-            <TouchableOpacity
-              key={item.scenario_id}
-              style={styles.resultCard}
-              onPress={() => navigation.navigate('Scenario', { scenarioId: item.scenario_id })}
-              activeOpacity={0.75}
-            >
-              <View style={[
-                styles.urgencyBar,
-                { backgroundColor: getUrgencyColor(item.urgency_level) }
-              ]} />
-              <View style={styles.resultContent}>
-                <View style={styles.resultTop}>
-                  <Text style={styles.resultTitle}>{item.title}</Text>
+          {searchResults.length > 0 ? (
+            <>
+              <Text style={styles.resultsCount}>
+                {searchResults.length} scenario{searchResults.length !== 1 ? 's' : ''} found
+              </Text>
+              {searchResults.map((item) => (
+                <TouchableOpacity
+                  key={item.scenario_id}
+                  style={styles.resultCard}
+                  onPress={() => navigation.navigate('Scenario', { scenarioId: item.scenario_id })}
+                  activeOpacity={0.75}
+                >
                   <View style={[
-                    styles.urgencyBadge,
-                    { backgroundColor: getUrgencyColor(item.urgency_level) + '22' }
-                  ]}>
-                    <Text style={[
-                      styles.urgencyBadgeText,
-                      { color: getUrgencyColor(item.urgency_level) }
-                    ]}>
-                      {item.urgency_level?.toUpperCase()}
+                    styles.urgencyBar,
+                    { backgroundColor: getUrgencyColor(item.urgency_level) }
+                  ]} />
+                  <View style={styles.resultContent}>
+                    <View style={styles.resultTop}>
+                      <Text style={styles.resultTitle}>{item.title}</Text>
+                      <View style={[
+                        styles.urgencyBadge,
+                        { backgroundColor: getUrgencyColor(item.urgency_level) + '22' }
+                      ]}>
+                        <Text style={[
+                          styles.urgencyBadgeText,
+                          { color: getUrgencyColor(item.urgency_level) }
+                        ]}>
+                          {item.urgency_level?.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.resultSummary} numberOfLines={2}>
+                      {item.summary}
                     </Text>
+                    {item.category_name && (
+                      <Text style={styles.resultCategory}>
+                        <Ionicons name="folder-outline" size={11} /> {item.category_name}
+                      </Text>
+                    )}
                   </View>
-                </View>
-                <Text style={styles.resultSummary} numberOfLines={2}>
-                  {item.summary}
-                </Text>
-                {item.category_name && (
-                  <Text style={styles.resultCategory}>
-                    <Ionicons name="folder-outline" size={11} /> {item.category_name}
-                  </Text>
-                )}
+                  <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                </TouchableOpacity>
+              ))}
+            </>
+          ) : (
+            <View style={styles.noResultsBox}>
+              <View style={styles.noResultsIconCircle}>
+                <Ionicons name="search-outline" size={32} color={colors.textSecondary} />
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
-            </TouchableOpacity>
-          ))}
+              <Text style={styles.noResultsTitle}>No Scenarios Found</Text>
+              <Text style={styles.noResultsSub}>
+                We couldn't find any offline guides matching "{searchQuery}".
+              </Text>
+              <View style={styles.suggestionsBox}>
+                <Text style={styles.suggestionTitle}>Suggestions:</Text>
+                <Text style={styles.suggestionText}>• Check spelling or try different keywords</Text>
+                <Text style={styles.suggestionText}>• Keep search terms simple (e.g., "burn", "bleed")</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.browseAllBtn}
+                onPress={clearResults}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="grid-outline" size={16} color={colors.white} />
+                <Text style={styles.browseAllText}>  Browse All Categories</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <View style={{ height: 40 }} />
         </ScrollView>
       ) : (
@@ -296,4 +323,69 @@ const styles = StyleSheet.create({
     paddingTop: 80, gap: 12,
   },
   emptyText: { fontSize: 15, color: colors.textSecondary },
+  noResultsBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: layout.spacing.lg,
+    paddingTop: 60,
+  },
+  noResultsIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: layout.spacing.md,
+  },
+  noResultsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: layout.spacing.xs,
+  },
+  noResultsSub: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: layout.spacing.lg,
+  },
+  suggestionsBox: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: layout.radius.md,
+    padding: layout.spacing.md,
+    width: '100%',
+    marginBottom: layout.spacing.xl,
+    ...layout.shadow,
+  },
+  suggestionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: layout.spacing.xs,
+  },
+  suggestionText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  browseAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: layout.radius.round,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
+    ...layout.shadow,
+  },
+  browseAllText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
 });

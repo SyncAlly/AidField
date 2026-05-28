@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { searchScenarios, getSettings } from '../database/db';
 import { getAIGuidance, getAIGuidanceWithImage, parseAIResponse } from '../services/claudeService';
 import { isOnline } from '../services/connectivityService';
@@ -16,33 +17,62 @@ import { colors } from '../constants/colors';
 import { layout } from '../constants/layout';
 
 const QUICK_SCENARIOS = [
-  { title: 'Cardiac Arrest / CPR',         keywords: 'cardiac arrest cpr'  },
-  { title: 'Severe Bleeding',              keywords: 'severe bleeding'      },
-  { title: 'Choking — Adult',              keywords: 'choking adult'        },
-  { title: 'Anaphylaxis / Severe Allergy', keywords: 'anaphylaxis'          },
-  { title: 'Snake Bite',                   keywords: 'snake bite'           },
-  { title: 'Burns & Scalds',              keywords: 'burns scalds'          },
+  { title: 'Cardiac Arrest / CPR', keywords: 'cardiac arrest cpr' },
+  { title: 'Severe Bleeding', keywords: 'severe bleeding' },
+  { title: 'Choking — Adult', keywords: 'choking adult' },
+  { title: 'Anaphylaxis / Severe Allergy', keywords: 'anaphylaxis' },
+  { title: 'Snake Bite', keywords: 'snake bite' },
+  { title: 'Burns & Scalds', keywords: 'burns scalds' },
 ];
 
 export default function HomeScreen({ navigation }) {
-  const [query, setQuery]                   = useState('');
-  const [aiResult, setAiResult]             = useState(null);
-  const [loading, setLoading]               = useState(false);
-  const [online, setOnline]                 = useState(false);
-  const [selectedImage, setSelectedImage]   = useState(null);
-  const [speaking, setSpeaking]             = useState(false);
-  const [listening, setListening]           = useState(false);
-  const [transcript, setTranscript]         = useState('');
+  const [query, setQuery] = useState('');
+  const [aiResult, setAiResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [online, setOnline] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [listening, setListening] = useState(false);
   const [quickScenarios, setQuickScenarios] = useState([]);
-  const [ttsEnabled, setTtsEnabled]         = useState(false);
-  const [pulseAnim]                         = useState(new Animated.Value(1));
-  const stopRequested                       = useRef(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [pulseAnim] = useState(new Animated.Value(1));
+  const stopRequested = useRef(false);
+  const scrollViewRef = useRef(null);
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const raw = event.results[0]?.transcript || '';
+    setQuery(raw);
+    if (event.isFinal) {
+      stopPulse();
+      setListening(false);
+      if (raw.trim().length > 0) {
+        processInput(raw.trim());
+      }
+    }
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    stopPulse();
+    setListening(false);
+    console.warn('Speech recognition error:', event.error, event.message);
+  });
 
   useEffect(() => {
     checkConnectivity();
     loadQuickScenarios();
-    return () => { Speech.stop(); };
-  }, []);
+
+    // Stop speech when leaving the screen
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      stopRequested.current = true;
+      Speech.stop();
+      setSpeaking(false);
+    });
+
+    return () => {
+      unsubscribeBlur();
+      Speech.stop();
+    };
+  }, [navigation]);
 
   useEffect(() => {
     if (ttsEnabled && aiResult && !aiResult.error) {
@@ -56,7 +86,7 @@ export default function HomeScreen({ navigation }) {
     try {
       const settings = await getSettings();
       if (settings?.tts_enabled === 1) setTtsEnabled(true);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const loadQuickScenarios = async () => {
@@ -76,7 +106,7 @@ export default function HomeScreen({ navigation }) {
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.12, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,    duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
       ])
     ).start();
   };
@@ -91,20 +121,24 @@ export default function HomeScreen({ navigation }) {
     if (listening) {
       stopPulse();
       setListening(false);
-      if (transcript.trim().length > 0) await processInput(transcript.trim());
+      ExpoSpeechRecognitionModule.stop();
+      if (query.trim().length > 0) await processInput(query.trim());
       return;
     }
+
+    const p = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!p.granted) { alert('Microphone permission required for voice search.'); return; }
+
     setListening(true);
-    setTranscript('');
+    setQuery('');
     setAiResult(null);
     startPulse();
-    setTimeout(async () => {
-      stopPulse();
-      setListening(false);
-      const sim = query.trim() || 'someone is choking and cannot breathe';
-      setTranscript(sim);
-      await processInput(sim);
-    }, 3000);
+
+    ExpoSpeechRecognitionModule.start({
+      lang: 'en-US',
+      interimResults: true,
+      continuous: false,
+    });
   };
 
   // ── Visual input ──────────────────────────────────────────────────────────
@@ -118,6 +152,10 @@ export default function HomeScreen({ navigation }) {
           onPress: async () => {
             const p = await ImagePicker.requestCameraPermissionsAsync();
             if (!p.granted) { alert('Camera permission needed.'); return; }
+
+            const m = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!m.granted) { alert('Gallery permission needed to save photos.'); return; }
+
             const r = await ImagePicker.launchCameraAsync({
               allowsEditing: true,
               quality: 0.5,
@@ -131,6 +169,7 @@ export default function HomeScreen({ navigation }) {
                 // Send to AI immediately
                 setLoading(true);
                 setAiResult(null);
+                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
                 try {
                   const raw = await getAIGuidanceWithImage(
                     query.trim() || 'What first aid is needed for what you see in this image?',
@@ -173,6 +212,7 @@ export default function HomeScreen({ navigation }) {
               if (online) {
                 setLoading(true);
                 setAiResult(null);
+                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
                 try {
                   const raw = await getAIGuidanceWithImage(
                     query.trim() || 'What first aid is needed for what you see in this image?',
@@ -209,6 +249,7 @@ export default function HomeScreen({ navigation }) {
     setAiResult(null);
     Speech.stop();
     setSpeaking(false);
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
     const connected = await isOnline();
     setOnline(connected);
@@ -245,7 +286,7 @@ export default function HomeScreen({ navigation }) {
           screen: 'Scenarios',
           params: { searchResults: offlineResults, searchQuery: text },
         });
-      } catch (err) {}
+      } catch (err) { }
     } finally {
       setLoading(false);
     }
@@ -265,6 +306,7 @@ export default function HomeScreen({ navigation }) {
     if (parsed.immediate) lines.push(`Immediate action. ${parsed.immediate}`);
     parsed.steps?.forEach((s, i) => lines.push(`Step ${i + 1}. ${s}`));
     if (parsed.callNote) lines.push(parsed.callNote);
+
     for (let i = 0; i < lines.length; i++) {
       if (stopRequested.current) break;
       await new Promise((res) => {
@@ -286,13 +328,12 @@ export default function HomeScreen({ navigation }) {
   };
 
   const clearAll = () => {
+    stopRequested.current = true; // Tell the TTS loop to break
     Speech.stop();
     setSpeaking(false);
     setQuery('');
     setAiResult(null);
     setSelectedImage(null);
-    setTranscript('');
-    stopRequested.current = false;
   };
 
   const handleEmergencyCall = () => {
@@ -301,8 +342,10 @@ export default function HomeScreen({ navigation }) {
       'You are about to call 999',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Call 999', style: 'destructive',
-          onPress: () => Linking.openURL('tel:999') },
+        {
+          text: 'Call 999', style: 'destructive',
+          onPress: () => Linking.openURL('tel:999')
+        },
       ]
     );
   };
@@ -321,6 +364,7 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -354,7 +398,9 @@ export default function HomeScreen({ navigation }) {
             placeholder="Describe the emergency..."
             placeholderTextColor={colors.textLight}
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(text) => {
+              setQuery(text);
+            }}
             autoCorrect={false}
             returnKeyType="go"
             onSubmitEditing={() => query.trim() && processInput(query.trim())}
@@ -380,13 +426,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-        {/* Transcript */}
-        {transcript.length > 0 && (
-          <View style={styles.transcriptBox}>
-            <Ionicons name="mic-outline" size={13} color={colors.primary} />
-            <Text style={styles.transcriptText}>  "{transcript}"</Text>
-          </View>
-        )}
+
 
         {/* Ask AI button */}
         {(query.trim().length > 2 || selectedImage) && (
@@ -581,7 +621,7 @@ export default function HomeScreen({ navigation }) {
                   {
                     backgroundColor:
                       item.urgency_level === 'red' ? colors.redCard :
-                      item.urgency_level === 'amber' ? '#FFF3E0' : '#E8F5E9'
+                        item.urgency_level === 'amber' ? '#FFF3E0' : '#E8F5E9'
                   }
                 ]}>
                   <Text style={[
@@ -589,7 +629,7 @@ export default function HomeScreen({ navigation }) {
                     { color: getUrgencyColor(item.urgency_level) }
                   ]}>
                     {item.urgency_level === 'red' ? 'CRITICAL' :
-                     item.urgency_level === 'amber' ? 'URGENT' : 'MODERATE'}
+                      item.urgency_level === 'amber' ? 'URGENT' : 'MODERATE'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textLight} />

@@ -729,17 +729,69 @@ export const updateSettings = async (language, ttsEnabled) => {
   );
 };
 
+const STOP_WORDS = new Set([
+  'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'arent', 'as', 'at',
+  'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
+  'cant', 'cannot', 'could', 'couldnt', 'did', 'didnt', 'do', 'does', 'doesnt', 'doing', 'dont', 'down', 'during',
+  'each', 'few', 'for', 'from', 'further', 'had', 'hadnt', 'has', 'hasnt', 'have', 'havent', 'having',
+  'he', 'hed', 'hell', 'hes', 'her', 'here', 'heres', 'hers', 'herself', 'him', 'himself', 'his',
+  'how', 'hows', 'i', 'id', 'ill', 'im', 'ive', 'if', 'in', 'into', 'is', 'isnt', 'it', 'its', 'itself',
+  'lets', 'me', 'more', 'most', 'mustnt', 'my', 'myself', 'no', 'nor', 'not', 'of', 'off', 'on', 'once',
+  'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own', 'same', 'shant',
+  'she', 'shed', 'shell', 'shes', 'should', 'shouldnt', 'so', 'some', 'such', 'than', 'that', 'thats',
+  'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'theres', 'these', 'they', 'theyd',
+  'theyll', 'theyre', 'theyve', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 'very',
+  'was', 'wasnt', 'we', 'wed', 'well', 'were', 'weve', 'werent', 'what', 'whats', 'when', 'whens',
+  'where', 'wheres', 'which', 'while', 'who', 'whos', 'whom', 'why', 'whys', 'with', 'wont', 'would', 'wouldnt',
+  'you', 'youd', 'youll', 'youre', 'youve', 'your', 'yours', 'yourself', 'yourselves',
+  'someone', 'something', 'somebody', 'anyone', 'anything', 'anybody', 'has', 'have', 'had', 'do', 'does',
+  'did', 'go', 'going', 'got'
+]);
+
 export const searchScenarios = async (query) => {
   const database = await getDB();
-  const searchTerm = `%${query.toLowerCase()}%`;
-  return await database.getAllAsync(
-    `SELECT s.*, c.category_name, c.urgency_color
-     FROM scenarios s
-     JOIN categories c ON s.category_id = c.category_id
-     WHERE LOWER(s.title) LIKE ?
-     OR LOWER(s.keywords) LIKE ?
-     OR LOWER(s.summary) LIKE ?
-     ORDER BY s.urgency_level ASC`,
-    [searchTerm, searchTerm, searchTerm]
-  );
+  if (!query) return [];
+
+  // Split query and clean tokens
+  const words = query
+    .toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '') // remove punctuation
+    .split(/\s+/)
+    .filter(w => w.length > 0 && !STOP_WORDS.has(w));
+
+  // If all words were stop-words, fallback to the original exact phrase query
+  if (words.length === 0) {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    return await database.getAllAsync(
+      `SELECT s.*, c.category_name, c.urgency_color
+       FROM scenarios s
+       JOIN categories c ON s.category_id = c.category_id
+       WHERE LOWER(s.title) LIKE ?
+       OR LOWER(s.keywords) LIKE ?
+       OR LOWER(s.summary) LIKE ?
+       ORDER BY s.urgency_level ASC`,
+      [searchTerm, searchTerm, searchTerm]
+    );
+  }
+
+  // Construct search query
+  let sql = `
+    SELECT s.*, c.category_name, c.urgency_color
+    FROM scenarios s
+    JOIN categories c ON s.category_id = c.category_id
+    WHERE 
+  `;
+
+  const clauses = [];
+  const params = [];
+  for (const word of words) {
+    clauses.push(`(LOWER(s.title) LIKE ? OR LOWER(s.keywords) LIKE ? OR LOWER(s.summary) LIKE ?)`);
+    const wildcard = `%${word}%`;
+    params.push(wildcard, wildcard, wildcard);
+  }
+
+  sql += clauses.join(' OR ');
+  sql += ` ORDER BY s.urgency_level ASC`;
+
+  return await database.getAllAsync(sql, params);
 };

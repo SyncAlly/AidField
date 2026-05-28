@@ -9,13 +9,13 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1C2B36"
+      "backgroundColor": "#000000"
     },
     "android": {
       "package": "com.aidfield.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1C2B36"
+        "backgroundColor": "#000000"
       }
     },
     "ios": {

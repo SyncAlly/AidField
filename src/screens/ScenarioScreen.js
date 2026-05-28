@@ -28,14 +28,46 @@ export default function ScenarioScreen({ navigation, route }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showSwahili, setShowSwahili] = useState(false);
   const [showResources, setShowResources] = useState(false);
+  const [swVoice, setSwVoice]         = useState(null);
+  const [enVoice, setEnVoice]         = useState(null);
 
   useEffect(() => {
     loadData();
+    fetchVoices();
     return () => {
       Speech.stop();
       stopRequested.current = true;
     };
   }, []);
+
+  const fetchVoices = async () => {
+    try {
+      const voices = await Speech.getAvailableVoicesAsync();
+      if (voices && voices.length > 0) {
+        // Find the best available Swahili voice (prefers Enhanced/KE/TZ)
+        const swVoices = voices.filter(v => v.language && v.language.toLowerCase().startsWith('sw'));
+        if (swVoices.length > 0) {
+          const bestSw = swVoices.find(v => v.quality?.toLowerCase() === 'enhanced') ||
+                         swVoices.find(v => v.language.toLowerCase().includes('ke')) ||
+                         swVoices.find(v => v.language.toLowerCase().includes('tz')) ||
+                         swVoices[0];
+          setSwVoice(bestSw.identifier);
+        }
+
+        // Find the best available English voice
+        const enVoices = voices.filter(v => v.language && v.language.toLowerCase().startsWith('en'));
+        if (enVoices.length > 0) {
+          const bestEn = enVoices.find(v => v.quality?.toLowerCase() === 'enhanced') ||
+                         enVoices.find(v => v.language.toLowerCase() === 'en-us') ||
+                         enVoices.find(v => v.language.toLowerCase() === 'en-gb') ||
+                         enVoices[0];
+          setEnVoice(bestEn.identifier);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not query system voices:', e);
+    }
+  };
 
   useEffect(() => {
     if (ttsEnabled && steps.length > 0 && scenario && !loading) {
@@ -97,15 +129,43 @@ export default function ScenarioScreen({ navigation, route }) {
         ? allSteps[i].instruction_sw
         : allSteps[i].instruction;
 
+      let prefix;
+      if (showSwahili) {
+        const swahiliOrdinals = {
+          1: "kwanza",
+          2: "pili",
+          3: "tatu",
+          4: "nne",
+          5: "tano",
+          6: "sita",
+          7: "saba",
+          8: "nane",
+          9: "tisa",
+          10: "kumi"
+        };
+        const ordinal = swahiliOrdinals[i + 1] || (i + 1);
+        prefix = `Hatua ya ${ordinal}. `;
+      } else {
+        prefix = `Step ${i + 1}. `;
+      }
+
       await new Promise((resolve) => {
-        Speech.speak(`Step ${i + 1}. ${text}`, {
+        const options = {
           language: showSwahili ? 'sw' : 'en',
-          rate: 0.85,
+          rate: showSwahili ? 0.82 : 0.85, // Slower Swahili speech is much easier to digest in emergencies
           pitch: 1.0,
           onDone: resolve,
           onError: resolve,
           onStopped: resolve,
-        });
+        };
+
+        if (showSwahili && swVoice) {
+          options.voice = swVoice;
+        } else if (!showSwahili && enVoice) {
+          options.voice = enVoice;
+        }
+
+        Speech.speak(`${prefix}${text}`, options);
       });
     }
 

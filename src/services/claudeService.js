@@ -49,7 +49,7 @@ const cleanMarkdown = (text) =>
 /**
  * Helper to send request with automatic retry for 503 errors (Server Busy)
  */
-const sendToGeminiWithRetry = async (model, payload, retries = 2) => {
+const sendToGeminiWithRetry = async (model, payload, retries = 3, delay = 2000) => {
   try {
     return await axios.post(
       `${BASE_URL}/${model}:generateContent?key=${API_KEY}`,
@@ -58,11 +58,11 @@ const sendToGeminiWithRetry = async (model, payload, retries = 2) => {
     );
   } catch (error) {
     const status = error.response?.status;
-    // 503 = Service Unavailable (Google's server is overloaded)
-    if (status === 503 && retries > 0) {
-      console.warn(`Server busy (503). Retrying ${model} in 2s...`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return sendToGeminiWithRetry(model, payload, retries - 1);
+    // 503 = Service Unavailable, 429 = Too Many Requests
+    if ((status === 503 || status === 429) && retries > 0) {
+      console.warn(`Server busy or rate limited (${status}). Retrying ${model} in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return sendToGeminiWithRetry(model, payload, retries - 1, delay * 2);
     }
     throw error;
   }
