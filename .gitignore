@@ -40,3 +40,8 @@ yarn-error.*
 /ios
 /android
 .env
+# Ignore documentation and presentation files
+*.docx
+*.pdf
+*.pptx
+~$*
