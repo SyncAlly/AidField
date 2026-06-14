@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
-import { searchScenarios } from '../database/db';
+import { searchScenarios, getSettings } from '../database/db';
 import { getAIGuidance, getAIGuidanceWithImage, parseAIResponse } from '../services/claudeService';
 import { isOnline } from '../services/connectivityService';
 import { colors } from '../constants/colors';
@@ -25,7 +25,24 @@ export default function SearchScreen({ navigation }) {
   const [mode, setMode]                 = useState('offline');
   const [selectedImage, setSelectedImage] = useState(null);
   const [speaking, setSpeaking]         = useState(false);
+  const [language, setLanguage]         = useState('en');
   const stopRequested                   = useRef(false);
+
+  React.useEffect(() => {
+    const loadLang = async () => {
+      try {
+        const s = await getSettings();
+        if (s?.language) {
+          setLanguage(s.language);
+        }
+      } catch (e) {}
+    };
+    loadLang();
+    const unsubscribeFocus = navigation.addListener('focus', loadLang);
+    return () => {
+      unsubscribeFocus();
+    };
+  }, [navigation]);
 
   const handleSearch = useCallback(async (text) => {
     setQuery(text);
@@ -60,9 +77,9 @@ export default function SearchScreen({ navigation }) {
     try {
       let raw;
       if (selectedImage?.base64) {
-        raw = await getAIGuidanceWithImage(query.trim(), selectedImage.base64);
+        raw = await getAIGuidanceWithImage(query.trim(), selectedImage.base64, language);
       } else {
-        raw = await getAIGuidance(query.trim());
+        raw = await getAIGuidance(query.trim(), language);
       }
       const parsed = parseAIResponse(raw);
       setAiResult(parsed);
@@ -132,15 +149,39 @@ export default function SearchScreen({ navigation }) {
     setSpeaking(true);
 
     const lines = [];
-    if (parsed.immediate) lines.push(`Immediate action. ${parsed.immediate}`);
-    parsed.steps.forEach((step, i) => lines.push(`Step ${i + 1}. ${step}`));
+    if (parsed.immediate) {
+      const immediatePrefix = language === 'sw' ? 'Hatua ya haraka. ' : 'Immediate action. ';
+      lines.push(`${immediatePrefix}${parsed.immediate}`);
+    }
+    parsed.steps.forEach((step, i) => {
+      let stepPrefix;
+      if (language === 'sw') {
+        const swahiliOrdinals = {
+          1: "kwanza",
+          2: "pili",
+          3: "tatu",
+          4: "nne",
+          5: "tano",
+          6: "sita",
+          7: "saba",
+          8: "nane",
+          9: "tisa",
+          10: "kumi"
+        };
+        const ordinal = swahiliOrdinals[i + 1] || (i + 1);
+        stepPrefix = `Hatua ya ${ordinal}. `;
+      } else {
+        stepPrefix = `Step ${i + 1}. `;
+      }
+      lines.push(`${stepPrefix}${step}`);
+    });
     if (parsed.callNote) lines.push(parsed.callNote);
 
     for (let i = 0; i < lines.length; i++) {
       if (stopRequested.current) break;
       await new Promise((resolve) => {
         Speech.speak(lines[i], {
-          language: 'en',
+          language: language === 'sw' ? 'sw' : 'en',
           rate: 0.85,
           onDone: resolve,
           onError: resolve,
@@ -212,11 +253,16 @@ export default function SearchScreen({ navigation }) {
         <View style={styles.aiBadgeRow}>
           <View style={styles.aiBadge}>
             <Ionicons name="sparkles" size={12} color={colors.white} />
-            <Text style={styles.aiBadgeText}>  AI Guidance</Text>
+            <Text style={styles.aiBadgeText}>
+              {language === 'sw' ? '  Mwongozo wa AI' : '  AI Guidance'}
+            </Text>
           </View>
           <View style={[styles.urgencyBadge, { backgroundColor: urgencyColor + '22' }]}>
             <Text style={[styles.urgencyBadgeText, { color: urgencyColor }]}>
-              {aiResult.urgency}
+              {language === 'sw'
+                ? (aiResult.urgency?.toUpperCase().includes('LIFE') || aiResult.urgency === 'red' ? 'HATARI KWA MAISHA' :
+                   aiResult.urgency?.toUpperCase().includes('URGENT') || aiResult.urgency === 'amber' ? 'YA HARAKA' : 'YA KIASI')
+                : aiResult.urgency}
             </Text>
           </View>
           <TouchableOpacity
@@ -230,7 +276,9 @@ export default function SearchScreen({ navigation }) {
               color={speaking ? colors.white : colors.primary}
             />
             <Text style={[styles.speakBtnText, speaking && { color: colors.white }]}>
-              {speaking ? ' Stop' : ' Listen'}
+              {speaking 
+                ? (language === 'sw' ? ' Acha' : ' Stop') 
+                : (language === 'sw' ? ' Sikiliza' : ' Listen')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -238,7 +286,9 @@ export default function SearchScreen({ navigation }) {
         {/* Immediate action */}
         {aiResult.immediate ? (
           <View style={[styles.immediateBox, { borderLeftColor: urgencyColor }]}>
-            <Text style={styles.immediateLabel}>⚡ Do this now:</Text>
+            <Text style={styles.immediateLabel}>
+              {language === 'sw' ? '⚡ Fanya hivi sasa:' : '⚡ Do this now:'}
+            </Text>
             <Text style={styles.immediateText}>{aiResult.immediate}</Text>
           </View>
         ) : null}
@@ -246,7 +296,9 @@ export default function SearchScreen({ navigation }) {
         {/* Steps */}
         {aiResult.steps?.length > 0 && (
           <>
-            <Text style={styles.aiSectionTitle}>Steps</Text>
+            <Text style={styles.aiSectionTitle}>
+              {language === 'sw' ? 'Hatua' : 'Steps'}
+            </Text>
             {aiResult.steps.map((step, i) => (
               <View key={i} style={styles.aiStep}>
                 <View style={[styles.aiStepNum, { backgroundColor: urgencyColor }]}>
@@ -261,7 +313,9 @@ export default function SearchScreen({ navigation }) {
         {/* Resources */}
         {aiResult.resources?.length > 0 && (
           <>
-            <Text style={styles.aiSectionTitle}>Improvised Resources</Text>
+            <Text style={styles.aiSectionTitle}>
+              {language === 'sw' ? 'Nyenzo Mbadala' : 'Improvised Resources'}
+            </Text>
             {aiResult.resources.map((r, i) => (
               <Text key={i} style={styles.aiResource}>• {r}</Text>
             ))}

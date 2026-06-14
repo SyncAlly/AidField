@@ -69,9 +69,13 @@ const sendToGeminiWithRetry = async (model, payload, retries = 3, delay = 2000) 
 };
 
 // ── Text query with Auto-Fallback ──────────────────────────────────────────
-export const getAIGuidance = async (userMessage) => {
+export const getAIGuidance = async (userMessage, language = 'en') => {
+  const langPrompt = language === 'sw'
+    ? '\n\nIMPORTANT: You must write all descriptions, steps, actions, and instructions in Kiswahili. However, you MUST keep the header labels (URGENCY:, IMMEDIATE ACTION:, STEPS:, IMPROVISED RESOURCES:, CALL:) in English exactly as shown above, so the app\'s parser doesn\'t break. For example, use "STEPS:" followed by Kiswahili instructions.'
+    : '';
+
   const payload = {
-    contents: [{ parts: [{ text: `${SYSTEM_PROMPT}\n\nUser: ${userMessage}` }] }],
+    contents: [{ parts: [{ text: `${SYSTEM_PROMPT}${langPrompt}\n\nUser: ${userMessage}` }] }],
     generationConfig: { 
       maxOutputTokens: 4096, 
       temperature: 0.2 
@@ -94,7 +98,11 @@ export const getAIGuidance = async (userMessage) => {
 };
 
 // ── Image + text query with Auto-Fallback ──────────────────────────────────
-export const getAIGuidanceWithImage = async (userMessage, base64Image) => {
+export const getAIGuidanceWithImage = async (userMessage, base64Image, language = 'en') => {
+  const langPrompt = language === 'sw'
+    ? '\n\nIMPORTANT: You must write all descriptions, steps, actions, and instructions in Kiswahili. However, you MUST keep the header labels (URGENCY:, IMMEDIATE ACTION:, STEPS:, IMPROVISED RESOURCES:, CALL:) in English exactly as shown above, so the app\'s parser doesn\'t break. For example, use "STEPS:" followed by Kiswahili instructions.'
+    : '';
+
   // Strip data URL prefix if present
   const cleanBase = base64Image.includes(',')
     ? base64Image.split(',')[1]
@@ -116,7 +124,7 @@ export const getAIGuidanceWithImage = async (userMessage, base64Image) => {
             }
           },
           {
-            text: SYSTEM_PROMPT + '\n\nUser: ' + (msg || 'What first aid is needed for what you see in this image?')
+            text: SYSTEM_PROMPT + langPrompt + '\n\nUser: ' + (msg || 'What first aid is needed for what you see in this image?')
           }
         ]
       }

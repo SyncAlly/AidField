@@ -89,6 +89,9 @@ export default function ScenarioScreen({ navigation, route }) {
       if (settings?.tts_enabled === 1) {
         setTtsEnabled(true);
       }
+      if (settings?.language === 'sw') {
+        setShowSwahili(true);
+      }
     } catch (e) {
       console.error('Failed to load scenario:', e);
     } finally {

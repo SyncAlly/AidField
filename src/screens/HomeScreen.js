@@ -35,6 +35,7 @@ export default function HomeScreen({ navigation }) {
   const [listening, setListening] = useState(false);
   const [quickScenarios, setQuickScenarios] = useState([]);
   const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [language, setLanguage] = useState('en');
   const [pulseAnim] = useState(new Animated.Value(1));
   const stopRequested = useRef(false);
   const scrollViewRef = useRef(null);
@@ -61,6 +62,11 @@ export default function HomeScreen({ navigation }) {
     checkConnectivity();
     loadQuickScenarios();
 
+    // Reload settings when focusing
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      checkConnectivity();
+    });
+
     // Stop speech when leaving the screen
     const unsubscribeBlur = navigation.addListener('blur', () => {
       stopRequested.current = true;
@@ -69,6 +75,7 @@ export default function HomeScreen({ navigation }) {
     });
 
     return () => {
+      unsubscribeFocus();
       unsubscribeBlur();
       Speech.stop();
     };
@@ -85,7 +92,10 @@ export default function HomeScreen({ navigation }) {
     setOnline(connected);
     try {
       const settings = await getSettings();
-      if (settings?.tts_enabled === 1) setTtsEnabled(true);
+      setTtsEnabled(settings?.tts_enabled === 1);
+      if (settings?.language) {
+        setLanguage(settings.language);
+      }
     } catch (e) { }
   };
 
@@ -135,7 +145,7 @@ export default function HomeScreen({ navigation }) {
     startPulse();
 
     ExpoSpeechRecognitionModule.start({
-      lang: 'en-US',
+      lang: language === 'sw' ? 'sw-KE' : 'en-US',
       interimResults: true,
       continuous: false,
     });
@@ -173,7 +183,8 @@ export default function HomeScreen({ navigation }) {
                 try {
                   const raw = await getAIGuidanceWithImage(
                     query.trim() || 'What first aid is needed for what you see in this image?',
-                    asset.base64
+                    asset.base64,
+                    language
                   );
                   setAiResult(parseAIResponse(raw));
                 } catch (e) {
@@ -216,7 +227,8 @@ export default function HomeScreen({ navigation }) {
                 try {
                   const raw = await getAIGuidanceWithImage(
                     query.trim() || 'What first aid is needed for what you see in this image?',
-                    asset.base64
+                    asset.base64,
+                    language
                   );
                   setAiResult(parseAIResponse(raw));
                 } catch (e) {
@@ -272,9 +284,9 @@ export default function HomeScreen({ navigation }) {
     try {
       let raw;
       if (selectedImage?.base64) {
-        raw = await getAIGuidanceWithImage(text, selectedImage.base64);
+        raw = await getAIGuidanceWithImage(text, selectedImage.base64, language);
       } else {
-        raw = await getAIGuidance(text);
+        raw = await getAIGuidance(text, language);
       }
       setAiResult(parseAIResponse(raw));
     } catch (e) {
@@ -303,15 +315,39 @@ export default function HomeScreen({ navigation }) {
     stopRequested.current = false;
     setSpeaking(true);
     const lines = [];
-    if (parsed.immediate) lines.push(`Immediate action. ${parsed.immediate}`);
-    parsed.steps?.forEach((s, i) => lines.push(`Step ${i + 1}. ${s}`));
+    if (parsed.immediate) {
+      const immediatePrefix = language === 'sw' ? 'Hatua ya haraka. ' : 'Immediate action. ';
+      lines.push(`${immediatePrefix}${parsed.immediate}`);
+    }
+    parsed.steps?.forEach((s, i) => {
+      let stepPrefix;
+      if (language === 'sw') {
+        const swahiliOrdinals = {
+          1: "kwanza",
+          2: "pili",
+          3: "tatu",
+          4: "nne",
+          5: "tano",
+          6: "sita",
+          7: "saba",
+          8: "nane",
+          9: "tisa",
+          10: "kumi"
+        };
+        const ordinal = swahiliOrdinals[i + 1] || (i + 1);
+        stepPrefix = `Hatua ya ${ordinal}. `;
+      } else {
+        stepPrefix = `Step ${i + 1}. `;
+      }
+      lines.push(`${stepPrefix}${s}`);
+    });
     if (parsed.callNote) lines.push(parsed.callNote);
 
     for (let i = 0; i < lines.length; i++) {
       if (stopRequested.current) break;
       await new Promise((res) => {
         Speech.speak(lines[i], {
-          language: 'en', rate: 0.85,
+          language: language === 'sw' ? 'sw' : 'en', rate: 0.85,
           onDone: res, onError: res, onStopped: res,
         });
       });
@@ -512,7 +548,9 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.aiBadgeRow}>
               <View style={styles.aiBadge}>
                 <Ionicons name="sparkles" size={12} color={colors.white} />
-                <Text style={styles.aiBadgeText}>  AI Guidance</Text>
+                <Text style={styles.aiBadgeText}>
+                  {language === 'sw' ? '  Mwongozo wa AI' : '  AI Guidance'}
+                </Text>
               </View>
               <View style={[
                 styles.urgencyBadge,
@@ -522,7 +560,10 @@ export default function HomeScreen({ navigation }) {
                   styles.urgencyBadgeText,
                   { color: getUrgencyColor(aiResult.urgency) }
                 ]}>
-                  {aiResult.urgency}
+                  {language === 'sw'
+                    ? (aiResult.urgency?.toUpperCase().includes('LIFE') || aiResult.urgency === 'red' ? 'HATARI KWA MAISHA' :
+                       aiResult.urgency?.toUpperCase().includes('URGENT') || aiResult.urgency === 'amber' ? 'YA HARAKA' : 'YA KIASI')
+                    : aiResult.urgency}
                 </Text>
               </View>
               <TouchableOpacity
@@ -536,7 +577,9 @@ export default function HomeScreen({ navigation }) {
                   color={speaking ? colors.white : colors.primary}
                 />
                 <Text style={[styles.speakBtnText, speaking && { color: colors.white }]}>
-                  {speaking ? ' Stop' : ' Listen'}
+                  {speaking 
+                    ? (language === 'sw' ? ' Acha' : ' Stop') 
+                    : (language === 'sw' ? ' Sikiliza' : ' Listen')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -546,14 +589,18 @@ export default function HomeScreen({ navigation }) {
                 styles.immediateBox,
                 { borderLeftColor: getUrgencyColor(aiResult.urgency) }
               ]}>
-                <Text style={styles.immediateLabel}>⚡ Do this now:</Text>
+                <Text style={styles.immediateLabel}>
+                  {language === 'sw' ? '⚡ Fanya hivi sasa:' : '⚡ Do this now:'}
+                </Text>
                 <Text style={styles.immediateText}>{aiResult.immediate}</Text>
               </View>
             ) : null}
 
             {aiResult.steps?.length > 0 && (
               <>
-                <Text style={styles.aiSectionTitle}>Steps</Text>
+                <Text style={styles.aiSectionTitle}>
+                  {language === 'sw' ? 'Hatua' : 'Steps'}
+                </Text>
                 {aiResult.steps.map((step, i) => (
                   <View key={i} style={styles.aiStep}>
                     <View style={[
@@ -570,7 +617,9 @@ export default function HomeScreen({ navigation }) {
 
             {aiResult.resources?.length > 0 && (
               <>
-                <Text style={styles.aiSectionTitle}>Improvised Resources</Text>
+                <Text style={styles.aiSectionTitle}>
+                  {language === 'sw' ? 'Nyenzo Mbadala' : 'Improvised Resources'}
+                </Text>
                 {aiResult.resources.map((r, i) => (
                   <Text key={i} style={styles.aiResource}>• {r}</Text>
                 ))}
